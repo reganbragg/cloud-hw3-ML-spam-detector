@@ -42,21 +42,22 @@ def lambda_handler(event, context):
             
         email_body = email_body.replace("\r", " ").replace("\n", " ")
         
-        # Get predictions from our endpoint
+        # Prepare input for sagemaker endpoint
         endpoint_name = 'sms-spam-classifier-mxnet-2022-11-17-23-51-03-470'
         detector_input = [email_body]
         
         vocabulary_length = 9013
         one_hot_detector_input = one_hot_encode(detector_input, vocabulary_length)
         encoded_detector_input = vectorize_sequences(one_hot_detector_input, vocabulary_length)
-        
-        # Need to insert classification stuff here from sagemaker
         detector_input = json.dumps(encoded_detector_input.tolist())
+        
+        # Get a response from the sagemaker endpoint and decode it
         response = sagemaker_client.invoke_endpoint(EndpointName=endpoint_name, ContentType='application/json', Body=detector_input)
         
         results = response['Body'].read().decode('utf-8')
         results_json = json.loads("" + results + "")
         
+        # Get the class and confidence percentage
         if(results_json['predicted_label'][0][0]==1.0):
             spam_class = 'SPAM'
         else:
