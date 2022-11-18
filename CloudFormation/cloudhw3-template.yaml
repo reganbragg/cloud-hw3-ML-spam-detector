@@ -1,0 +1,105 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: Email spam detector with AWS
+
+Parameters:
+  SageMakerEndpoint:
+    Type: String
+
+Resources:
+  S3EmailBucket:
+    Type: 'AWS::S3::Bucket'
+    DependsOn:
+      - LF1
+      - S3BucketPermission
+    Properties:
+      BucketName: 'cloudhw3-ses-email-store1'
+      AccessControl: PublicRead
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: s3:ObjectCreated:*
+            Function: !GetAtt LF1.Arn
+
+  S3BucketPermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties: 
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !GetAtt LF1.Arn
+      Principal: s3.amazonaws.com
+      SourceAccount: 559059304793
+      SourceArn: arn:aws:s3:::cloudhw3-ses-email-store1
+
+  S3EmailBucketPolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket: !Ref S3EmailBucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: AllowSESPuts
+            Effect: Allow
+            Principal:
+              Service:
+                - ses.amazonaws.com
+            Action:
+              - 's3:PutObject'
+            Resource:
+              - !Sub arn:aws:s3:::${S3EmailBucket}/*
+            Condition:
+              StringEquals:
+                aws:Referer: '559059304793'
+
+  LF1Role:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSLambdaExecute
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/AmazonSESFullAccess
+        - arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
+
+  LF1:
+    Type: 'AWS::Lambda::Function'
+    DependsOn:
+      - LF1Role
+    Properties:
+      FunctionName: 'LF1'
+      Runtime: python3.9
+      Role: !GetAtt LF1Role.Arn
+      Handler: lambda_function.lambda_handler
+      Code:
+        S3Bucket: cloudhw3-lambda-code-store
+        S3Key: lambda-code.zip
+      Environment:
+        Variables:
+          endpoint_name: !Ref SageMakerEndpoint
+      Timeout: 30
+
+  S3RuleSet:
+    Type: 'AWS::SES::ReceiptRuleSet'
+    Properties:
+      RuleSetName: 'cloudhw3-receive-emails'
+
+  S3Rule:
+    Type: 'AWS::SES::ReceiptRule'
+    DependsOn:
+      - S3RuleSet
+    Properties:
+      Rule:
+        Name: 'email-to-s3'
+        Actions:
+          - S3Action:
+              BucketName: !Ref S3EmailBucket
+        Enabled: true
+      RuleSetName: !Ref S3RuleSet
+
