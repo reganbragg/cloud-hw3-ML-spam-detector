@@ -1,7 +1,8 @@
-import json
-import urllib.parse
 import boto3
 import email
+import json
+import urllib.parse
+from datetime import datetime
 from sms_spam_classifier_utilities import one_hot_encode
 from sms_spam_classifier_utilities import vectorize_sequences
 
@@ -25,12 +26,16 @@ def lambda_handler(event, context):
         # Extract contents from email
         email_contents = email.message_from_string(body)
         
-        email_date = email_contents.get('Date')
+        email_datetime = email_contents.get('Date')
+        email_datetime = email_datetime[:email_datetime.find('-')-1]
+        dt = datetime.strptime(email_datetime, '%a, %d %b %Y %H:%M:%S')
+        email_date = str(dt.date())
+        email_time = str(dt.time())
+        
         email_recipient = email_contents.get('To')
         email_sender = email_contents.get('From')
         email_sender = email_sender[email_sender.find('<')+1:-1]
         email_subject = email_contents.get('Subject')
-        print(email_sender, email_subject)
         
         email_body = ''
         if email_contents.is_multipart():
@@ -65,12 +70,15 @@ def lambda_handler(event, context):
         confidence_score = str(results_json['predicted_probability'][0][0]*100)
         confidence_score = confidence_score.split('.')[0]
         
+        spam_class = 'SPAM'
+        confidence_score = '12'
+        
         # Send the email through SES
         SES_email_body = email_body
         if len(SES_email_body) > 240:
             SES_email_body = SES_email_body[:240]
         
-        SES_email_line1 = 'We received your email sent at ' + email_date + ' with the subject ' + email_subject + '.\n\n'
+        SES_email_line1 = 'We received your email sent on ' + email_date + ' at ' + email_time + ' with the subject ' + email_subject + '.\n\n'
         SES_email_line2 = 'Here is a 240 character sample of the email body:\n'
         SES_email_line3 = SES_email_body + '\n\n'
         SES_email_line4 = 'The email was categorized as ' + spam_class + ' with a ' + confidence_score + '% confidence.'
@@ -96,7 +104,7 @@ def lambda_handler(event, context):
                     "Data": "Spam Detector Results",
                 },
             },
-            Source="spam@spamdetector.live",
+            Source="regan@reganjbragg.tech",
         )
         
         return "success"
