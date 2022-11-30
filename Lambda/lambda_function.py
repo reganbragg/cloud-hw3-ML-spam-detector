@@ -70,9 +70,6 @@ def lambda_handler(event, context):
         confidence_score = str(results_json['predicted_probability'][0][0]*100)
         confidence_score = confidence_score.split('.')[0]
         
-        spam_class = 'SPAM'
-        confidence_score = '12'
-        
         # Send the email through SES
         SES_email_body = email_body
         if len(SES_email_body) > 240:
